@@ -1,0 +1,20 @@
+# Host port 5433 on purpose: leaves 5432 free for any Postgres you already
+# have installed locally. Matches the DATABASE_URL in .env.example.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: jobagent
+      POSTGRES_PASSWORD: jobagent
+      POSTGRES_DB: jobagent
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobagent"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

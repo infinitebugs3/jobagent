@@ -1,0 +1,98 @@
+term,expansions
+# Curated search synonyms. Loaded by `jobagent seed-synonyms`.
+#
+# Small on purpose. The alternative -- an enormous auto-generated analyzer file
+# that nobody wires up -- is worse than nothing, because everyone assumes it
+# works. Every row here earns its place: it is an alias a job title actually
+# uses, not a dictionary synonym.
+#
+# `expansions` is pipe-separated. The term itself is always searched too, so it
+# does not need repeating. Matching is on whole lowercase terms.
+#
+# --- role titles ---------------------------------------------------------
+sde,software development engineer|software engineer
+swe,software engineer
+mts,member of technical staff
+smts,senior member of technical staff
+sre,site reliability engineer
+devops,site reliability engineer|platform engineer|infrastructure engineer
+ic,individual contributor
+eng,engineer
+dev,developer|engineer
+fullstack,full stack|full-stack
+backend,back end|back-end|server side
+frontend,front end|front-end
+# --- AI / ML -------------------------------------------------------------
+ml,machine learning
+mle,machine learning engineer
+ai,artificial intelligence
+genai,generative ai|llm|generative
+llm,large language model|generative ai|foundation model
+llms,large language model|generative ai
+rag,retrieval augmented generation|retrieval-augmented
+nlp,natural language processing
+cv,computer vision
+dl,deep learning
+llmops,mlops|llm infrastructure
+mlops,ml infrastructure|ml platform
+agentic,agent orchestration|multi-agent|ai agent
+vectordb,vector database|vector search|embedding store
+embeddings,embedding|vector search
+finetuning,fine-tuning|fine tuning
+inference,model serving|serving
+# --- infra / platform ----------------------------------------------------
+k8s,kubernetes
+kube,kubernetes
+iac,infrastructure as code|terraform
+ci,continuous integration|ci/cd
+cd,continuous delivery|ci/cd
+tf,terraform
+aws,amazon web services
+gcp,google cloud|google cloud platform
+azure,microsoft azure
+distsys,distributed systems
+microservices,microservice|service oriented
+observability,monitoring|telemetry|tracing
+# --- languages / frameworks ----------------------------------------------
+js,javascript
+ts,typescript
+py,python
+golang,go
+springboot,spring boot|spring
+jvm,java|kotlin|scala
+node,node.js|nodejs
+reactjs,react
+nextjs,next.js|react
+dotnet,.net|c#
+cpp,c++
+rustlang,rust
+# --- data ----------------------------------------------------------------
+db,database
+rdbms,relational database|sql
+sql,relational database
+nosql,mongodb|cassandra|dynamodb
+etl,data pipeline|elt
+dwh,data warehouse|warehouse
+bigdata,spark|hadoop|big data
+streaming,kafka|kinesis|event streaming
+kafka,event streaming|streaming
+# --- product / seniority hints -------------------------------------------
+pm,product manager
+tpm,technical program manager
+em,engineering manager
+staff,staff engineer
+principal,principal engineer
+# --- work arrangement ----------------------------------------------------
+wfh,work from home|remote
+hybrid,partially remote
+onsite,in office|in-office
+contract,contractor|contract to hire
+# --- india geography (search text, distinct from location_bucket) --------
+blr,bangalore|bengaluru
+bengaluru,bangalore
+gurgaon,gurugram|delhi ncr
+noida,delhi ncr
+ncr,delhi ncr|gurugram|noida
+bombay,mumbai
+madras,chennai
+hyd,hyderabad

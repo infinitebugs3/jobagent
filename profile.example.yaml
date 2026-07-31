@@ -1,0 +1,47 @@
+# Copy to profile.yaml (gitignored) and fill in. Field names match the
+# Profile model in src/jobagent/models.py - keep them in sync.
+#
+# Week 1 keeps this static. It becomes the dynamic profile store in phase 2.
+
+name: Your Name
+headline: Backend engineer, distributed systems and data infrastructure
+
+years_experience: 4
+
+# Feeds both hard filters and the embedded profile text.
+skills:
+  - Python
+  - PostgreSQL
+  - Docker
+  - AWS
+  - Go
+  - Kubernetes
+
+titles_wanted:
+  - Backend Engineer
+  - Platform Engineer
+  - Infrastructure Engineer
+
+# Hard filter. Anything matching these is dropped before scoring.
+titles_excluded:
+  - Intern
+  - Sales Engineer
+  - Support Engineer
+  - Business Development
+
+locations:
+  - Remote
+  - Bangalore
+  - Delhi NCR
+remote_ok: true
+
+min_salary: 2400000
+currency: INR
+
+work_authorization:
+  - India
+
+# Paste your resume as plain text. Embedded on day 6 for similarity ranking,
+# and the grounding source for tailored generation in phase 2.
+resume_text: |
+  Replace this with your actual resume text.

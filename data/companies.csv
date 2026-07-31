@@ -1,0 +1,56 @@
+name,careers_url,size_bucket,notes
+Stripe,https://stripe.com/jobs/search,1000+,payments
+Ramp,https://ramp.com/careers,201-1000,fintech
+Vercel,https://vercel.com/careers,201-1000,dev tools
+Linear,https://linear.app/careers,51-200,product
+Supabase,https://supabase.com/careers,51-200,infra
+Razorpay,https://razorpay.com/jobs/,1000+,india fintech
+Zerodha,https://zerodha.com/careers/,201-1000,india fintech
+Postman,https://www.postman.com/company/careers/,1000+,india dev tools
+Hasura,https://hasura.io/careers/,51-200,india infra
+Atlan,https://atlan.com/careers/,201-1000,india data
+Sentry,https://sentry.io/careers/,201-1000,observability
+Grafana Labs,https://grafana.com/about/careers/,1000+,observability
+PlanetScale,https://planetscale.com/careers,51-200,databases
+Neon,https://neon.tech/careers,51-200,databases
+Temporal,https://temporal.io/careers,201-1000,infra
+Cal.com,https://cal.com/careers,1-50,open source
+Browserbase,https://www.browserbase.com/careers,1-50,browser infra
+Modal,https://modal.com/careers,1-50,ml infra
+Replicate,https://replicate.com/careers,51-200,ml infra
+Weights & Biases,https://wandb.ai/site/careers,201-1000,ml tooling
+Airbnb,https://boards.greenhouse.io/airbnb,1000+,india eng hub; 13 india roles at seed time
+Cloudflare,https://boards.greenhouse.io/cloudflare,1000+,india eng hub; 3 india roles at seed time
+Coinbase,https://boards.greenhouse.io/coinbase,1000+,india eng hub; 9 india roles at seed time
+Confluent,https://jobs.ashbyhq.com/confluent,1000+,india eng hub; 5 india roles at seed time
+Coursera,https://boards.greenhouse.io/coursera,1000+,india eng hub; 5 india roles at seed time
+CRED,https://jobs.lever.co/cred,1000+,india fintech; 2 india roles at seed time
+Databricks,https://boards.greenhouse.io/databricks,1000+,india eng hub; 76 india roles at seed time
+Devrev,https://boards.greenhouse.io/devrev,201-1000,india dev saas; 18 india roles at seed time
+Druva,https://boards.greenhouse.io/druva,1000+,india data protection; 11 india roles at seed time
+Elastic,https://boards.greenhouse.io/elastic,1000+,india eng hub; 16 india roles at seed time
+Fi Money,https://jobs.lever.co/epifi,201-1000,india neobank; 8 india roles at seed time
+Fictiv,https://boards.greenhouse.io/fictiv,201-1000,india eng hub; 31 india roles at seed time
+GitLab,https://boards.greenhouse.io/gitlab,1000+,remote first; 30 india roles at seed time
+Groww,https://boards.greenhouse.io/groww,1000+,india fintech; 11 india roles at seed time
+HighRadius,https://boards.greenhouse.io/highradius,1000+,india fintech saas; 50 india roles at seed time
+Meesho,https://jobs.lever.co/meesho,1000+,india ecommerce; 41 india roles at seed time
+Mindtickle,https://jobs.lever.co/mindtickle,1000+,india saas; 19 india roles at seed time
+MongoDB,https://boards.greenhouse.io/mongodb,1000+,india eng hub; 57 india roles at seed time
+Netradyne,https://boards.greenhouse.io/netradyne,1000+,india vision ai; 40 india roles at seed time
+Observe.AI,https://boards.greenhouse.io/observeai,201-1000,india contact centre ai; 7 india roles at seed time
+Paytm,https://jobs.lever.co/paytm,1000+,india fintech; 200 india roles at seed time
+PhonePe,https://boards.greenhouse.io/phonepe,1000+,india fintech; 46 india roles at seed time
+Rubrik,https://boards.greenhouse.io/rubrik,1000+,india eng hub; 20 india roles at seed time
+Skyflow,https://jobs.ashbyhq.com/skyflow,51-200,india eng hub; 3 india roles at seed time
+Snowflake,https://jobs.ashbyhq.com/snowflake,1000+,india eng hub; 15 india roles at seed time
+Thoughtworks,https://boards.greenhouse.io/thoughtworks,1000+,india consultancy; 2 india roles at seed time
+Turing,https://boards.greenhouse.io/turing,1000+,india remote eng; 9 india roles at seed time
+Twilio,https://boards.greenhouse.io/twilio,1000+,india eng hub; 25 india roles at seed time
+Amazon India,https://www.amazon.jobs/en/search?country=IND,1000+,big tech india; 2411 india roles at seed time
+Freshworks,https://jobs.smartrecruiters.com/Freshworks,1000+,india saas; 52 india roles at seed time
+Swiggy,https://jobs.smartrecruiters.com/Swiggy,1000+,india food delivery; 3 india roles at seed time
+Adobe,https://adobe.wd5.myworkdayjobs.com/external_experienced?country=India,1000+,big tech india; workday
+NVIDIA,https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite?country=India,1000+,big tech india; workday
+Target India,https://target.wd5.myworkdayjobs.com/targetcareers?country=India,1000+,big tech india; workday
+PayPal,https://paypal.wd1.myworkdayjobs.com/jobs,1000+,big tech india; workday

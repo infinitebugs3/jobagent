@@ -1,0 +1,26 @@
+# Secrets / personal data
+.env
+profile.yaml
+
+# Local run artifacts
+data/unresolved.csv
+data/*.local.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
