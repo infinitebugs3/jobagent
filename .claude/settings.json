@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm i *)",
+      "Bash(neon --version)",
+      "Bash(neon profile *)",
+      "Bash(neon mcp *)",
+      "Bash(neon skills *)",
+      "Bash(neon --help)"
+    ]
+  }
+}
