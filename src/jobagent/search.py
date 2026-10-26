@@ -57,6 +57,103 @@ FRESHNESS_HALFLIFE_DAYS = 30.0
 MAX_TERMS = 12  # a query with more terms than this is a profile, not a search
 
 
+# ---------------------------------------------------------------------------
+# Role groups
+# ---------------------------------------------------------------------------
+# The simplest role filter that needs no new pipeline: match the title against a
+# curated keyword group. Titles are always present (unlike descriptions, missing
+# on 28% of rows) and they are what a role actually *is*.
+#
+# This is a FILTER, not a scoring term -- picking "Backend" narrows the result
+# set, it does not merely reorder it. Keeping that distinction is why the search
+# stays predictable.
+#
+# Groups deliberately overlap ('Platform Engineer' is both backend and infra).
+# A job matching any selected group is kept; there is no attempt at exclusive
+# classification, which is the thing that needs a real classifier (phase 3).
+ROLE_GROUPS: dict[str, dict] = {
+    "backend": {
+        "label": "Backend",
+        "patterns": ["backend", "back end", "back-end", "server side", "api engineer",
+                     "distributed systems", "software engineer", "software development engineer",
+                     "member of technical staff"],
+    },
+    "ai_ml": {
+        "label": "AI / ML",
+        "patterns": ["machine learning", "ml", "ai", "applied ai", "artificial intelligence",
+                     "llm", "genai", "generative", "nlp", "deep learning",
+                     "research engineer", "computer vision", "data scientist"],
+    },
+    "infra": {
+        "label": "Infra / Platform",
+        "patterns": ["infrastructure", "platform engineer", "devops", "sre",
+                     "site reliability", "cloud engineer", "kubernetes", "systems engineer"],
+    },
+    "data": {
+        "label": "Data",
+        "patterns": ["data engineer", "data platform", "analytics engineer", "etl",
+                     "data infrastructure", "database engineer"],
+    },
+    "frontend": {
+        "label": "Frontend",
+        "patterns": ["frontend", "front end", "front-end", "ui engineer", "web engineer",
+                     "react", "javascript engineer"],
+    },
+    "fullstack": {
+        "label": "Full stack",
+        "patterns": ["full stack", "fullstack", "full-stack"],
+    },
+    "mobile": {
+        "label": "Mobile",
+        "patterns": ["android", "ios", "mobile engineer", "react native", "flutter"],
+    },
+    "security": {
+        "label": "Security",
+        "patterns": ["security engineer", "appsec", "infosec", "cryptography",
+                     "security architect"],
+    },
+    "qa": {
+        "label": "QA / Test",
+        "patterns": ["qa engineer", "test engineer", "sdet", "quality engineer",
+                     "automation engineer"],
+    },
+    "management": {
+        "label": "Management",
+        "patterns": ["engineering manager", "director", "head of", "vp", "principal engineer",
+                     "staff engineer", "tech lead", "technical lead"],
+    },
+}
+
+# Punctuation to spaces, then single-space padded. Turns 'Engineer-ML, Sr.'
+# into ' engineer ml sr ' so patterns can anchor on word starts.
+_ROLE_TITLE = "(' ' || regexp_replace(lower({alias}.title), '[^a-z0-9]+', ' ', 'g') || ' ')"
+
+
+def role_clause(roles: list[str], alias: str = "j") -> tuple[str, list]:
+    """Hard filter: keep jobs whose title matches any pattern of any chosen role.
+
+    Patterns match at a **word start** and may run on: ' llm' matches "LLM",
+    "LLMs" and "LLMOps" but not "Fu*lfilLM*ent". That distinction is not
+    hypothetical -- a naive `%llm%` pulled every Amazon fulfilment-centre role
+    into the AI/ML filter, which is exactly the kind of quiet wrongness that
+    makes people stop trusting a filter.
+
+    A trailing boundary is deliberately not required, so 'ai engineer' still
+    matches "AI Engineering".
+    """
+    patterns: list[str] = []
+    for slug in roles:
+        group = ROLE_GROUPS.get(slug)
+        if group:
+            patterns.extend(group["patterns"])
+    if not patterns:
+        return "", []
+
+    title = _ROLE_TITLE.format(alias=alias)
+    parts = [f"{title} like %s" for _ in patterns]
+    return "(" + " or ".join(parts) + ")", [f"% {p}%" for p in patterns]
+
+
 @dataclass
 class Term:
     """One user-supplied term plus everything it should also match."""
@@ -121,6 +218,26 @@ def load_synonyms_csv(path: str = "data/synonyms.csv") -> list[tuple[str, list[s
 # ---------------------------------------------------------------------------
 # SQL generation
 # ---------------------------------------------------------------------------
+_ERE_META = set(r".^$*+?()[]{}|\\")
+
+
+def _ere_escape(text: str) -> str:
+    """Escape POSIX ERE metacharacters. 'c++' and '.net' are real search terms."""
+    return "".join("\\" + ch if ch in _ERE_META else ch for ch in text)
+
+
+def word_start_pattern(text: str) -> str:
+    r"""`\m` anchors at a word start, so a term matches whole words and their
+    suffixes but never the middle of another word.
+
+    Without this, `%rag%` matches "Beve**rag**e" and a Food & Beverage Team
+    Leader scores 100 on a search for RAG -- outranking every genuine hit,
+    because the exact tier is the highest one there is. Postgres indexes `~*`
+    with gin_trgm_ops just as it does ILIKE, so the anchor is free.
+    """
+    return r"\m" + _ere_escape(text)
+
+
 def _websearch_query(term: Term) -> str:
     """Build a websearch_to_tsquery string OR-ing every variant.
 
@@ -140,11 +257,11 @@ def term_score_sql(term: Term, alias: str = "j") -> tuple[str, list]:
     """
     params: list = []
 
-    ilike_parts = []
+    exact_parts = []
     for variant in term.variants:
-        ilike_parts.append(f"{alias}.title ilike %s")
-        params.append(f"%{variant}%")
-    exact = f"case when ({' or '.join(ilike_parts)}) then {W_EXACT} else 0.0 end"
+        exact_parts.append(f"{alias}.title ~* %s")
+        params.append(word_start_pattern(variant))
+    exact = f"case when ({' or '.join(exact_parts)}) then {W_EXACT} else 0.0 end"
 
     # Gate the rank behind the match test. `@@` is an indexable boolean;
     # ts_rank_cd has to walk the whole tsvector, and a job description tsvector
@@ -200,8 +317,8 @@ def candidate_clause(terms: list[Term], alias: str = "j") -> tuple[str, list]:
         parts.append(f"{alias}.search_tsv @@ websearch_to_tsquery('english', %s)")
         params.append(_websearch_query(term))
         for variant in term.variants:
-            parts.append(f"{alias}.title ilike %s")
-            params.append(f"%{variant}%")
+            parts.append(f"{alias}.title ~* %s")
+            params.append(word_start_pattern(variant))
         # `<%` reads its cutoff from pg_trgm.word_similarity_threshold, which
         # db.connect() pins to FUZZY_FLOOR. %% is a literal percent for psycopg.
         parts.append(f"%s <%% {alias}.title")
@@ -265,5 +382,8 @@ def exclusion_clause(exclude_text: str, alias: str = "j") -> tuple[str, list]:
     terms = parse_terms(exclude_text)
     if not terms:
         return "", []
-    parts = [f"{alias}.title ilike %s" for _ in terms]
-    return f"not ({' or '.join(parts)})", [f"%{t}%" for t in terms]
+    # Word-anchored for the same reason as the exact tier, and the stakes are
+    # higher: an exclusion is a hard filter, so `sales` matching "Whole*sale*s"
+    # deletes jobs from the result set with nothing on screen to explain it.
+    parts = [f"{alias}.title ~* %s" for _ in terms]
+    return f"not ({' or '.join(parts)})", [word_start_pattern(t) for t in terms]

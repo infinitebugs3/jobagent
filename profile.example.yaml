@@ -6,6 +6,9 @@
 name: Your Name
 headline: Backend engineer, distributed systems and data infrastructure
 
+# Drives two things: the seniority band the compiled search filters on, and the
+# experience ceiling the UI *suggests* under the slider. The ceiling is never
+# applied on its own -- nothing is hidden until you move the slider yourself.
 years_experience: 4
 
 # Feeds both hard filters and the embedded profile text.

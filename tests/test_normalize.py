@@ -9,11 +9,18 @@ from jobagent.normalize import (  # noqa: E402
     dedupe_key,
     detect_remote_type,
     location_bucket,
+    min_years_experience,
     normalize_company,
     normalize_title,
     question_hash,
     seniority_of,
 )
+
+
+def bar(text):
+    """Just the number -- the evidence snippet is asserted separately."""
+    found = min_years_experience(text)
+    return found[0] if found else None
 
 
 def test_company_suffixes_stripped():
@@ -84,6 +91,82 @@ def test_remote_detection():
     assert detect_remote_type("Hybrid - Bangalore") == "hybrid"
     assert detect_remote_type("Bangalore Office") == "onsite"
     assert detect_remote_type(None) == "unknown"
+
+
+def test_min_years_reads_the_common_phrasings():
+    assert bar("3+ years of experience") == 3
+    assert bar("at least 3 years of experience") == 3
+    assert bar("minimum of 3 years of experience") == 3
+    assert bar("3 to 5 years of experience") == 3
+    assert bar("3-5 years of experience") == 3
+    # The bar is the low end of a range, whichever dash the board happened to
+    # emit. A dash not in the class reads '1‐2 years' as a bare 2 and rounds
+    # the requirement up, hiding a job the user could actually get.
+    assert bar("2–12+ years of industry software engineering experience") == 2
+    assert bar("1‐2 years’ experience in business development") == 1
+    assert bar("1‑2 years of experience") == 1
+    assert bar("5−8 years of experience") == 5
+    # No literal 'of experience' anywhere -- these are real postings.
+    assert bar("6+ years leading complex sales cycles") == 6
+    assert bar("15+ years' experience") == 15
+
+
+def test_min_years_reads_written_numbers():
+    assert bar("five years of professional experience") == 5
+    assert bar("six (6) years of experience in software") == 6
+
+
+def test_min_years_ignores_company_boilerplate():
+    assert bar("For 30+ years, our clients have trusted us") is None
+    assert bar("the first database provider to IPO in over 20 years") is None
+    assert bar("we handle billions of transactions each year") is None
+
+
+def test_min_years_ignores_temporal_windows_and_benefits():
+    assert bar("closed enterprise deals in the last 3 years") is None
+    assert bar("scaling to $1b in the next 5 years") is None
+    assert bar("paid month off after 4 years & every 2 years thereafter") is None
+
+
+def test_min_years_takes_the_bar_not_the_nested_clause():
+    """The whole reason aggregation is per-segment rather than global.
+
+    A global MIN reads these as 1-year and 5-year roles. Both are real
+    postings, and both are exactly the seniority this filter exists to catch.
+    """
+    assert bar("Minimum of 15 years professional experience, with at least "
+               "1 year in management") == 15
+    assert bar("10+ years of software engineering experience, including 5+ "
+               "years of distributed systems work") == 10
+
+
+def test_min_years_takes_the_lowest_of_independent_requirements():
+    """Separate requirements, though -- lowest wins. Basic vs preferred
+    qualifications arrive concatenated, so the basic bar has to survive."""
+    assert bar("5+ years of experience with distributed systems.\n"
+               "3+ years of professional software development experience") == 3
+
+
+def test_min_years_is_none_when_unstated():
+    assert bar("We are a fast growing team building payments infrastructure.") is None
+    assert bar("") is None
+    assert bar(None) is None
+
+
+def test_min_years_rejects_implausible_values():
+    # Real artifact: stripping markup glues '8-10 years' into '810 years'.
+    assert bar("810 years of experience") is None
+    assert bar("1971 years of experience") is None
+    # But entry-level phrasing must survive, and zero is not 'unstated'.
+    assert bar("0-2 years of experience") == 0
+
+
+def test_min_years_returns_the_evidence():
+    """The snippet is what makes the audit a SELECT and the UI tooltip honest."""
+    found = min_years_experience("Requirements\n3+ years of professional experience")
+    assert found is not None
+    assert found[0] == 3
+    assert "3+ years of professional experience" in found[1]
 
 
 def test_question_hash_ignores_cosmetics():

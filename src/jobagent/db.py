@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,7 +14,7 @@ from psycopg.types.json import Jsonb
 
 from . import search
 from .models import RawPosting
-from .normalize import dedupe_key, location_facet, seniority_of
+from .normalize import dedupe_key, location_facet, min_years_experience, seniority_of
 
 
 def _load_dotenv(path: str = ".env") -> None:
@@ -100,12 +101,15 @@ def upsert_jobs(conn, company_id: int, company_name: str, postings: list[RawPost
     """Returns (inserted, updated). Idempotent -- run it a hundred times."""
     inserted = updated = 0
     for p in postings:
+        # Once, not twice in the params tuple -- it walks the whole description.
+        bar = min_years_experience(p.description_md)
         row = conn.execute(
             """
             insert into job (company_id, external_id, title, location, remote_type,
                              description_md, apply_url, dedupe_key, posted_at,
-                             location_bucket, seniority)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             location_bucket, seniority,
+                             min_years_experience, min_years_evidence)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (company_id, external_id) do update
                 set title        = excluded.title,
                     location     = excluded.location,
@@ -115,6 +119,8 @@ def upsert_jobs(conn, company_id: int, company_name: str, postings: list[RawPost
                     dedupe_key   = excluded.dedupe_key,
                     location_bucket = excluded.location_bucket,
                     seniority    = excluded.seniority,
+                    min_years_experience = excluded.min_years_experience,
+                    min_years_evidence   = excluded.min_years_evidence,
                     last_seen_at = now(),
                     closed_at    = null
             returning (xmax = 0) as is_insert
@@ -131,6 +137,8 @@ def upsert_jobs(conn, company_id: int, company_name: str, postings: list[RawPost
                 p.posted_at,
                 location_facet(p.location),
                 seniority_of(p.title),
+                bar[0] if bar else None,
+                bar[1] if bar else None,
             ),
         ).fetchone()
         if row["is_insert"]:
@@ -215,6 +223,108 @@ def backfill_facets(conn, batch_size: int = 1000, force: bool = False) -> int:
     return len(rows)
 
 
+def backfill_experience(
+    conn,
+    batch_size: int = 500,
+    force: bool = False,
+    dry_run: bool = False,
+    progress=None,
+) -> dict:
+    """Populate min_years_experience / min_years_evidence from the description.
+
+    Deliberately not folded into `backfill_facets`. Two differences make a
+    shared implementation worse than two short ones:
+
+    * It reads `description_md`, the largest column in the table -- ~43 MB
+      across the corpus. `backfill_facets` pulls its whole result set into
+      memory, which is fine for two short text columns and not fine here, so
+      this walks the table by keyset instead. That also makes it resumable.
+
+    * It commits per batch rather than once at the end. `job.search_tsv` is a
+      *stored generated* column over description_md, and Postgres re-evaluates
+      stored generated columns on every UPDATE of the row whether or not the
+      base column changed. So this rewrites ~40 MB of tsvector and its GIN
+      entries; holding that in one transaction bloats WAL for no benefit.
+      Expect minutes, not seconds.
+
+    `force` recomputes every row, which is what you want after editing the
+    patterns in normalize.py. Without it, rows that legitimately state no bar
+    are re-read on every run -- they stay NULL, and NULL is indistinguishable
+    from 'not yet scanned'. That is cheaper than a sentinel column.
+
+    `dry_run` scans and reports without writing: the loop you run after every
+    regex edit, before letting it near the table.
+    """
+    seen = Counter()
+    samples: list[tuple[int, str, str]] = []
+    scanned = 0
+    written = 0
+    last_id = 0
+
+    unscanned = "" if force else "and min_years_experience is null"
+    while True:
+        rows = conn.execute(
+            f"""
+            select id, title, description_md
+              from job
+             where id > %s and description_md is not null {unscanned}
+             order by id
+             limit %s
+            """,
+            (last_id, batch_size),
+        ).fetchall()
+        if not rows:
+            break
+        last_id = rows[-1]["id"]
+        scanned += len(rows)
+
+        values = []
+        sampled = False
+        for r in rows:
+            found = min_years_experience(r["description_md"])
+            seen["none" if found is None else found[0]] += 1
+            if found is not None:
+                values.append((r["id"], found[0], found[1]))
+                # One per batch, not the first twenty rows. Jobs arrive from the
+                # boards in company order, so the first twenty are twenty
+                # near-identical postings from whoever sorts first.
+                if not sampled and len(samples) < 20:
+                    samples.append((found[0], r["title"], found[1]))
+                    sampled = True
+
+        if values and not dry_run:
+            conn.execute(
+                """
+                update job j
+                   set min_years_experience = v.years,
+                       min_years_evidence   = v.evidence
+                  from (select * from unnest(
+                            %s::bigint[], %s::int[], %s::text[]
+                        ) as t(id, years, evidence)) v
+                 where j.id = v.id
+                """,
+                (
+                    [v[0] for v in values],
+                    [v[1] for v in values],
+                    [v[2] for v in values],
+                ),
+            )
+            conn.commit()
+            written += len(values)
+
+        if progress:
+            progress(scanned, written)
+
+    return {
+        "scanned": scanned,
+        "written": written,
+        "with_bar": sum(n for k, n in seen.items() if k != "none"),
+        "without_bar": seen["none"],
+        "distribution": seen,
+        "samples": samples,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Synonyms
 # ---------------------------------------------------------------------------
@@ -293,6 +403,20 @@ def upsert_search_profile(
             (name, query_text, exclude_text, payload, is_default, profile_id),
         ).fetchone()
     return row["id"]
+
+
+def search_profile_id_by_name(conn, name: str) -> int | None:
+    """`jobagent profile-import` is meant to be re-runnable, the way `init` is.
+    Without this it inserts a fresh row every time -- upsert_search_profile only
+    updates when handed an explicit id -- so editing profile.yaml and
+    re-importing silently accumulates duplicates and orphans the labels' worth
+    of tuning on the previous one. Oldest wins, so re-importing keeps landing on
+    the same row rather than walking down a pile of duplicates.
+    """
+    row = conn.execute(
+        "select id from search_profile where name = %s order by id limit 1", (name,)
+    ).fetchone()
+    return row["id"] if row else None
 
 
 def delete_search_profile(conn, profile_id: int) -> int:

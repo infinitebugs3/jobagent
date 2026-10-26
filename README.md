@@ -146,6 +146,57 @@ match from six weeks ago. `first_seen_at` is already stored — weight it.
 
 ---
 
+## Week 2 — search, filters, and the labeling UI
+
+Week 1 fills a database. Week 2 makes it usable: 10,520 postings is far too many
+to browse, and `cli list` shows no description, so labeling from it is guesswork.
+
+```bash
+pip install -e ".[api]"
+
+jobagent init                 # applies every migration in migrations/
+jobagent backfill             # location_bucket + seniority on existing rows
+jobagent seed-synonyms        # curated aliases: k8s -> kubernetes
+jobagent profile-import       # profile.yaml -> a saved search
+
+uvicorn api.main:app --port 8000       # terminal 1
+npm --prefix web run dev               # terminal 2 -> localhost:3000
+```
+
+The CLI gained search too, so none of this requires a browser:
+
+```bash
+jobagent list --q "spring boot, rag" --sort relevance
+jobagent list --profile default --max-age 7
+jobagent label 4211 apply "strong infra ownership" --tags great-fit,good-company
+```
+
+**Search.** Terms are comma-separated and scored in tiers: an exact title match
+(100) can never be outranked by any number of full-text (10 × rank) or fuzzy
+(3 × similarity) hits. Scores sum across terms, so 3-of-5 beats 1-of-5, then
+decay with age — a 70% match from yesterday really does beat a 90% match from
+six weeks ago. Every row comes back with `matched_terms`, so "why is this here"
+is always answerable.
+
+**Filters vs. scoring.** Structured facets (role, location, seniority, company,
+work type, board) go in the `WHERE` clause and change *which* jobs come back.
+Keywords go in the `ORDER BY` and change *what order*. Mixing the two is what
+makes a search feel arbitrary.
+
+**Role filter.** Curated title keyword groups — the simplest thing that needs no
+classifier. Matching is anchored at word starts: `llm` matches "LLMOps" but not
+"Fu*lfilLM*ent", which a naive `%llm%` happily returned.
+
+**Labeling.** `/review` is keyboard-driven — <kbd>a</kbd> interested,
+<kbd>m</kbd> maybe, <kbd>n</kbd> not for me, <kbd>1</kbd>–<kbd>9</kbd> reason
+tags, <kbd>u</kbd> undo. A verdict applies to the whole dedupe group, so the
+same role on three boards is judged once. 30% of the queue is drawn at random
+and stored as `source='exploration'`: labeling only what the ranker surfaced
+would produce an eval set selected by the thing it is meant to evaluate.
+
+Duplicate postings are collapsed everywhere (10,520 → 8,544 roles), so one job
+never appears 31 times.
+
 ## What comes next (not this week)
 
 - Dynamic profile store: structured facts + document corpus + answer bank, replacing `profile.yaml`
@@ -160,16 +211,25 @@ match from six weeks ago. `first_seen_at` is already stored — weight it.
 
 ```
 migrations/001_init.sql     schema — read this first
+migrations/002_*.sql        facets, tsvector, saved searches, reason tags
 data/companies.csv          registry seed
+data/synonyms.csv           curated search aliases
 profile.example.yaml        copy to profile.yaml
+ROADMAP.md                  long-term plan + realistic timeline
 src/jobagent/
   models.py                 RawPosting, Profile
   normalize.py              pure functions, dedupe key      <- fully tested
+  search.py                 terms, synonyms, scoring tiers, role groups
+  query.py                  filters -> SQL, shared by CLI and API
+  profile.py                profile.yaml -> saved search
   db.py                     upserts, closure detection, labels
   sync.py                   rate-limited sync loop
   cli.py                    init / detect / sync / list / label / stats
+                            / backfill / seed-synonyms / profile-import
   ats/
     detector.py             careers URL -> (provider, token)
-    fetchers.py             greenhouse | lever | ashby
-tests/test_normalize.py     no DB, no network, runs in <1s
+    fetchers.py             greenhouse | lever | ashby | ...
+api/                        FastAPI over query.py — no SQL of its own
+web/                        Next.js: /review, /jobs, /jobs/[id], /searches
+tests/                      no DB, no network, 44 tests in <1s
 ```

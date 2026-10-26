@@ -18,6 +18,13 @@ match = [
     "scikit-learn>=1.5",
 ]
 
+# Week 2. Small and fast; the CLI never imports any of it.
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "psycopg_pool>=3.2",
+]
+
 [project.scripts]
 jobagent = "jobagent.cli:main"
 

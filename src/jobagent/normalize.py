@@ -32,6 +32,70 @@ _COMPANY_SUFFIXES = {
 _REMOTE_HINTS = ("remote", "work from home", "wfh", "anywhere", "distributed")
 _HYBRID_HINTS = ("hybrid", "flexible", "partially remote")
 
+# --- stated years of experience -------------------------------------------
+# One requirement per segment. Splitting on sentence and bullet boundaries is
+# what stops a nested clause ('15 years ... with at least 1 year in management')
+# being read as a 1-year role.
+_SEGMENT_SPLIT = re.compile(r"[\n.;•]|\s-\s")
+_HORIZONTAL_WS = re.compile(r"[^\S\n]+")
+
+# The lookarounds are load-bearing. Stripping HTML glues '8-10 years' into
+# '810 years' in real postings, and a bare \d{1,2} reads that as 81.
+_YEARS_NUM = re.compile(
+    r"(?<![\d.,$])(\d{1,2})(?!\d)\s*\+?\s*"
+    # Every dash a job board actually emits. Missing one does not just lose the
+    # range -- it reads '1‐2 years' as a bare '2 years' and rounds the bar *up*,
+    # which is the direction that wrongly hides a job.
+    r"(?:(?:[-‐‑‒–—−]|to)\s*(\d{1,2})(?!\d)\s*\+?\s*)?"
+    r"(?:years?|yrs?)\b",
+    re.I,
+)
+_YEARS_WORD = re.compile(
+    r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen)\b"
+    r"\s*(?:\(\d{1,2}\)\s*)?\+?\s*(?:years?|yrs?)\b",  # incl. legal 'six (6) years'
+    re.I,
+)
+_YEAR_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15,
+}
+
+# Left context that turns a year count into something other than a requirement:
+# a lookback window ('the last 3 years'), a benefit ('every 2 years'), or
+# company boilerplate ('for 30+ years').
+_NOT_A_BAR = re.compile(
+    r"(?:last|past|next|previous|coming|every|each|after|within|over|under|"
+    r"nearly|almost|more than|about|around|approximately|for)\s+(?:the\s+)?$",
+    re.I,
+)
+# Right context that turns it into one. The reliable signal is structural, not
+# vocabulary: a bar names the thing the years are *in*. Matching on a list of
+# domain words instead loses '4+ years of relevant work', '8 years in offensive
+# security' and '3+ years in Renewal Operations' -- ~1000 real bars in this
+# corpus, all phrased as `N years <preposition> <domain>`.
+_BAR_LEAD = re.compile(
+    r"^['’]?\s*(?:of|in|as|with|at|building|working|leading|managing|developing|"
+    r"designing|architecting|supporting|driving|running|owning)\b",
+    re.I,
+)
+# Fallback for the phrasings that put the noun first ("15+ years' experience",
+# "5 years hands-on experience").
+_BAR_CUE = re.compile(
+    r"(experience|background|professional|industry|hands[- ]on|expertise|"
+    r"track record|qualification|engineering)",
+    re.I,
+)
+# A figure to the right of one of these is a sub-requirement of the bar already
+# stated in the same segment, not a bar of its own.
+_SUBORDINATE = re.compile(r"\b(including|of which|with at least|out of which|thereof)\b", re.I)
+
+# No genuine bar above this exists in the wild; every match over it in this
+# corpus was boilerplate ('for 30+ years, our clients have trusted us').
+MAX_PLAUSIBLE_YEARS = 20
+_LEFT_WINDOW = 25
+_RIGHT_WINDOW = 70
+_EVIDENCE_PAD = 60
+
 
 def strip_accents(text: str) -> str:
     return "".join(
@@ -82,6 +146,76 @@ def seniority_of(title: str) -> str:
     if any(w in t for w in ("junior", "jr.", "jr ", "entry", " i ", " 1 ")):
         return "junior"
     return "mid"
+
+
+def _candidates(segment: str) -> list[tuple[re.Match, int]]:
+    """Every year-figure in one segment, in the order they are written."""
+    hits = [(m, int(m.group(1))) for m in _YEARS_NUM.finditer(segment)]
+    hits += [(m, _YEAR_WORDS[m.group(1).lower()]) for m in _YEARS_WORD.finditer(segment)]
+    return sorted(hits, key=lambda hit: hit[0].start())
+
+
+def _bar_in_segment(segment: str) -> tuple[int, int] | None:
+    """The first figure in this segment that reads as a requirement."""
+    for match, years in _candidates(segment):
+        if not 0 <= years <= MAX_PLAUSIBLE_YEARS:
+            continue
+        if _NOT_A_BAR.search(segment[max(0, match.start() - _LEFT_WINDOW):match.start()]):
+            continue
+        after = segment[match.end():match.end() + _RIGHT_WINDOW]
+        if not (_BAR_LEAD.match(after) or _BAR_CUE.search(after)):
+            continue
+        if _SUBORDINATE.search(segment[:match.start()]):
+            continue
+        return years, match.start()
+    return None
+
+
+def min_years_experience(description_md: str | None) -> tuple[int, str] | None:
+    """Lowest number of years the posting demands, plus the text it came from.
+
+    The ATSes expose no field for this -- it exists only in prose -- which is
+    why `seniority_of()` misses it entirely and 'Software Development Engineer
+    II' reads as `mid` while its description asks for 3+ years.
+
+    Aggregation is MIN *across segments*, not across the whole description. A
+    global minimum reads 'minimum of 15 years professional experience, with at
+    least 1 year in management' as a 1-year role -- and that failure lands
+    exactly on the senior postings this is meant to catch. Within a segment the
+    first surviving figure wins, so a nested clause never outranks the bar it
+    hangs off.
+
+    Known limitation, and it is the deliberate direction. A conjunctive list --
+    Amazon's basic qualifications are '3+ years professional development' AND
+    '2+ years design or architecture' -- has an effective bar of the highest
+    bullet, but MIN reports the lowest. Taking MAX instead would be right for
+    those and wrong for the far more common cases: preferred qualifications
+    concatenated onto basic ones, and either/or paths ('MBA with 4+ years or
+    graduate with 6+'). Under-reporting shows a role that was a slight stretch;
+    over-reporting hides one that was reachable, and a hidden role is invisible
+    forever.
+
+    Returns None when nothing is stated, which must never be read as zero: a
+    third of postings state no bar at all and have to stay visible.
+    """
+    if not description_md:
+        return None
+
+    text = _HORIZONTAL_WS.sub(" ", description_md.replace("\r\n", "\n"))
+
+    best: tuple[int, str] | None = None
+    for segment in _SEGMENT_SPLIT.split(text):
+        segment = segment.strip()
+        if not segment:
+            continue
+        found = _bar_in_segment(segment)
+        if found is None:
+            continue
+        years, at = found
+        if best is None or years < best[0]:
+            start = max(0, at - _EVIDENCE_PAD)
+            best = (years, segment[start:at + _EVIDENCE_PAD].strip())
+    return best
 
 
 def location_bucket(location: str | None) -> str:

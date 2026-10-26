@@ -131,7 +131,7 @@ def test_candidate_clause_covers_every_scoring_tier():
     term = Term("k8s", ["kubernetes"])
     cand, _ = search.candidate_clause([term])
     assert "search_tsv @@" in cand              # FTS tier
-    assert cand.count("title ilike") == 2       # exact tier, one per variant
+    assert cand.count("title ~*") == 2          # exact tier, one per variant
     assert "<%" in cand                         # fuzzy tier
 
 

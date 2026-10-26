@@ -7,6 +7,7 @@ closes that gap: it is the bridge from "who I am" to "what the search returns".
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import yaml
@@ -42,6 +43,24 @@ def seniority_bands(years: float) -> list[str]:
     return ["senior", "staff+"]
 
 
+EXPERIENCE_TOLERANCE = 1
+
+
+def experience_ceiling(years: float) -> int:
+    """The highest stated years-of-experience bar still worth showing.
+
+    Advisory, and deliberately so: it is offered under the slider as a starting
+    point and never applied on its own. Hiding jobs by default -- from a number
+    the user never chose, against a bar a regex read out of prose -- is exactly
+    the kind of silent filtering that makes a search feel arbitrary.
+
+    Wider than the stated years because postings inflate. A one-year tolerance
+    keeps '3+ years' reachable at 1.5 years of experience, which is roughly how
+    recruiters read their own bullets.
+    """
+    return int(math.ceil(years)) + EXPERIENCE_TOLERANCE
+
+
 def to_search_profile(profile: Profile) -> dict:
     """Compile a Profile into the search_profile row shape.
 
@@ -65,6 +84,11 @@ def to_search_profile(profile: Profile) -> dict:
     filters = {
         "location_bucket": locations,
         "seniority": seniority_bands(profile.years_experience),
+        # Advisory, not applied. `max_years_required` is the key the query layer
+        # reads; this one is deliberately a different name so that compiling a
+        # profile can never start hiding jobs on its own. The UI offers it under
+        # the slider as "your profile suggests N".
+        "suggested_max_years": experience_ceiling(profile.years_experience),
     }
     if remote_types:
         filters["remote_type"] = remote_types

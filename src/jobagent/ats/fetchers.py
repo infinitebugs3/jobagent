@@ -441,8 +441,16 @@ def fetch_amazon(token: str, client: httpx.Client) -> list[RawPosting]:
                 continue
             location = j.get("normalized_location") or j.get("location")
             body = "\n\n".join(
-                _strip_html(j.get(k))
-                for k in ("description", "basic_qualifications", "preferred_qualifications")
+                # Labelled, because concatenating them bare loses the one
+                # distinction that matters on the card: basic qualifications
+                # are the bar, preferred ones are a wish list. Read as one run
+                # of bullets they look equally binding.
+                (f"{heading}\n{_strip_html(j[k])}" if heading else _strip_html(j[k]))
+                for k, heading in (
+                    ("description", ""),
+                    ("basic_qualifications", "Basic qualifications"),
+                    ("preferred_qualifications", "Preferred qualifications"),
+                )
                 if j.get(k)
             )
             out.append(
